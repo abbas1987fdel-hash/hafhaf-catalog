@@ -2,6 +2,12 @@
 
 Arabic RTL catalog and separate admin entry, built with React, TypeScript, Vite and Convex.
 
+Store: https://abbas1987fdel-hash.github.io/hafhaf-catalog/
+
+Admin: https://abbas1987fdel-hash.github.io/hafhaf-catalog/admin.html
+
+Convex production project: `bs-fdl:hafhaf-catalog:production`.
+
 - Customer storefront: `/`. No cart or checkout.
 - Admin application: `/admin.html`. Category, product, banner and store-name management.
 - Per-category WhatsApp support, IQD prices, optional quantity and stock status.
