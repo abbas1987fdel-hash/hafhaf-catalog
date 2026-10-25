@@ -1,6 +1,17 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 export default defineSchema({
+  categoryPins: defineTable({
+    category: v.id("categories"),
+    code: v.string(),
+    version: v.string(),
+  }).index("category", ["category"]),
+  categoryAccess: defineTable({
+    category: v.id("categories"),
+    token: v.string(),
+    version: v.string(),
+    expires: v.number(),
+  }).index("token", ["token"]),
   categories: defineTable({
     name: v.string(),
     phone: v.string(),

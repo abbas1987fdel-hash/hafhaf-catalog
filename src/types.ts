@@ -1,4 +1,7 @@
 export type Category = {
+  locked?: boolean;
+  accessCode?: string;
+  productCount?: number;
   _id: string;
   name: string;
   phone: string;

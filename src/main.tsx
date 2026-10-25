@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ConvexProvider,
@@ -37,9 +37,40 @@ class Boundary extends React.Component<
   }
 }
 function Live() {
-  const data = useQuery(anyApi.catalog.catalog) as Catalog | undefined;
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const cb = () => setRevision((v) => v + 1);
+    addEventListener("hafhaf-auth", cb);
+    const timer = setInterval(cb, 60000);
+    return () => {
+      removeEventListener("hafhaf-auth", cb);
+      clearInterval(timer);
+    };
+  }, []);
+  let accessTokens: string[] = [];
+  try {
+    const stored = JSON.parse(
+      sessionStorage.getItem("hafhaf-categories") || "[]",
+    );
+    if (Array.isArray(stored))
+      accessTokens = stored.filter((t) => typeof t === "string").slice(-100);
+  } catch {}
+  const data = useQuery(anyApi.catalog.catalog, {
+    adminToken: isAdmin
+      ? sessionStorage.getItem("hafhaf-admin") || undefined
+      : undefined,
+    accessTokens,
+    refresh: revision,
+  }) as Catalog | undefined;
+  const lastData = useRef<Catalog | undefined>(undefined);
+  if (data) lastData.current = data;
   const state = useConvexConnectionState();
-  return <Shell data={data} connected={state.isWebSocketConnected} />;
+  return (
+    <Shell
+      data={data || lastData.current}
+      connected={state.isWebSocketConnected}
+    />
+  );
 }
 function Shell({
   data,

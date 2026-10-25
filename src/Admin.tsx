@@ -74,6 +74,7 @@ export default function Admin({ data }: { data: Catalog }) {
       else {
         setToken(r.token);
         sessionStorage.setItem("hafhaf-admin", r.token);
+        dispatchEvent(new Event("hafhaf-auth"));
         setPin("");
       }
     } catch {
@@ -176,6 +177,7 @@ export default function Admin({ data }: { data: Catalog }) {
             onClick={() => {
               logout({ token }).catch(() => {});
               sessionStorage.removeItem("hafhaf-admin");
+              dispatchEvent(new Event("hafhaf-auth"));
               setToken("");
             }}
           >
@@ -470,6 +472,7 @@ function EditorForm({
       if (editor.kind === "category") {
         if (!image) throw Error("أضف صورة القسم");
         await saveC({
+          accessCode: val("accessCode"),
           token,
           id: item?._id,
           name: val("name"),
@@ -600,6 +603,22 @@ function EditorForm({
                 />
               </label>
               <small>استخدم رقم الدعم مع رمز الدولة، مثل 964 للعراق.</small>
+              <label>
+                رمز دخول القسم
+                <input
+                  name="accessCode"
+                  required
+                  minLength={4}
+                  maxLength={64}
+                  defaultValue={c?.accessCode || ""}
+                  autoComplete="off"
+                  placeholder="رمز خاص بهذا القسم"
+                />
+              </label>
+              <small>
+                يطلبه الزبون قبل مشاهدة المنتجات. تغيير الرمز يلغي صلاحية الرموز
+                السابقة.
+              </small>
             </>
           ) : editor.kind === "product" ? (
             <>

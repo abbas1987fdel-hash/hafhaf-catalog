@@ -54,23 +54,60 @@ export const logout = mutation({
   },
 });
 export const catalog = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    adminToken: v.optional(v.string()),
+    accessTokens: v.optional(v.array(v.string())),
+    refresh: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const adminSession = args.adminToken
+      ? await ctx.db
+          .query("sessions")
+          .withIndex("token", (q) => q.eq("token", args.adminToken!))
+          .unique()
+      : null;
+    const admin = !!adminSession && adminSession.expires > Date.now();
     const cats = await ctx.db.query("categories").collect();
+    const pins = await ctx.db.query("categoryPins").collect();
+    const allowed = new Set<string>();
+    for (const token of (args.accessTokens || []).slice(0, 100)) {
+      const grant = await ctx.db
+        .query("categoryAccess")
+        .withIndex("token", (q) => q.eq("token", token))
+        .unique();
+      if (
+        grant &&
+        grant.expires > Date.now() &&
+        pins.some(
+          (pin) =>
+            pin.category === grant.category && pin.version === grant.version,
+        )
+      )
+        allowed.add(grant.category);
+    }
+    const canSee = (id: string) =>
+      admin || !pins.some((pin) => pin.category === id) || allowed.has(id);
     const products = await ctx.db.query("products").collect();
     const settings = await ctx.db.query("settings").first();
     return {
       categories: await Promise.all(
         cats.map(async (c) => ({
           ...c,
+          locked: !canSee(c._id),
+          productCount: products.filter((p) => p.category === c._id).length,
+          ...(admin
+            ? { accessCode: pins.find((pin) => pin.category === c._id)?.code }
+            : {}),
           imageUrl: await ctx.storage.getUrl(c.image),
         })),
       ),
       products: await Promise.all(
-        products.map(async (p) => ({
-          ...p,
-          imageUrl: await ctx.storage.getUrl(p.image),
-        })),
+        products
+          .filter((p) => canSee(p.category))
+          .map(async (p) => ({
+            ...p,
+            imageUrl: await ctx.storage.getUrl(p.image),
+          })),
       ),
       settings: settings
         ? {
@@ -81,6 +118,44 @@ export const catalog = query({
           }
         : null,
     };
+  },
+});
+export const unlockCategory = mutation({
+  args: { category: v.id("categories"), code: v.string() },
+  handler: async (ctx, args) => {
+    if (!(await ctx.db.get(args.category))) return { error: "القسم غير موجود" };
+    const pin = await ctx.db
+      .query("categoryPins")
+      .withIndex("category", (q) => q.eq("category", args.category))
+      .unique();
+    if (!pin) return { unlocked: true };
+    const now = Date.now(),
+      key = "category:" + args.category;
+    const a = await ctx.db
+      .query("attempts")
+      .withIndex("key", (q) => q.eq("key", key))
+      .unique();
+    if (a && a.until > now && a.count >= 5)
+      return { error: "محاولات كثيرة، انتظر خمس دقائق ثم حاول مجددًا" };
+    if (args.code !== pin.code) {
+      if (a)
+        await ctx.db.patch(a._id, {
+          count: a.until > now ? a.count + 1 : 1,
+          until: a.until > now ? a.until : now + 300000,
+        });
+      else
+        await ctx.db.insert("attempts", { key, count: 1, until: now + 300000 });
+      return { error: "رمز القسم غير صحيح" };
+    }
+    if (a) await ctx.db.delete(a._id);
+    const token = crypto.randomUUID() + crypto.randomUUID();
+    await ctx.db.insert("categoryAccess", {
+      category: args.category,
+      version: pin.version,
+      token,
+      expires: now + 8 * 3600000,
+    });
+    return { token };
   },
 });
 export const uploadUrl = mutation({
@@ -107,6 +182,7 @@ export const saveCategory = mutation({
     name: v.string(),
     phone: v.string(),
     image: v.id("_storage"),
+    accessCode: v.optional(v.string()),
   },
   handler: async (ctx, a) => {
     await requireAdmin(ctx, a.token);
@@ -114,12 +190,33 @@ export const saveCategory = mutation({
     const phone = a.phone.replace(/[^0-9]/g, "");
     if (!/^\d{10,15}$/.test(phone)) fail("أدخل رقم واتساب مع رمز الدولة");
     const data = { name: clean(a.name), phone, image: a.image };
+    if (
+      a.accessCode !== undefined &&
+      (a.accessCode.trim().length < 4 || a.accessCode.trim().length > 64)
+    )
+      fail("رمز القسم يجب أن يكون من 4 إلى 64 حرفًا أو رقمًا");
+    let categoryId = a.id;
     if (a.id) {
       const old = await ctx.db.get(a.id);
       if (!old) fail("القسم غير موجود");
       await ctx.db.patch(a.id, data);
       if (old.image !== a.image) await ctx.storage.delete(old.image);
-    } else await ctx.db.insert("categories", data);
+    } else categoryId = await ctx.db.insert("categories", data);
+    if (a.accessCode !== undefined) {
+      const pin = await ctx.db
+        .query("categoryPins")
+        .withIndex("category", (q) => q.eq("category", categoryId!))
+        .unique();
+      const code = a.accessCode.trim();
+      if (pin && pin.code !== code)
+        await ctx.db.patch(pin._id, { code, version: crypto.randomUUID() });
+      else if (!pin)
+        await ctx.db.insert("categoryPins", {
+          category: categoryId!,
+          code,
+          version: crypto.randomUUID(),
+        });
+    }
   },
 });
 export const saveProduct = mutation({
