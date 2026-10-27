@@ -9,6 +9,7 @@
  */
 
 import type * as catalog from "../catalog.js";
+import type * as textStyle from "../textStyle.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +19,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   catalog: typeof catalog;
+  textStyle: typeof textStyle;
 }>;
 
 /**
