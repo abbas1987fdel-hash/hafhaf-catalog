@@ -107,7 +107,7 @@ export default function Install({ admin }: { admin: boolean }) {
             <X size={18} />
           </button>
           <span className="app-icon">
-            <Smartphone />
+            {admin ? <Smartphone /> : <img src={import.meta.env.BASE_URL + "store-icon-192.png"} alt="شعار متجر مجمع الهفهاف" style={{width:56,height:56,borderRadius:12,objectFit:"contain"}} />}
           </span>
           <div>
             <strong>

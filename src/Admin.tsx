@@ -26,6 +26,8 @@ import {
   defaults,
   money,
   phoneNumber,
+  newestFirst,
+  type TextStyle,
 } from "./types";
 import { toWebP } from "./images";
 import "./admin-update.css";
@@ -283,7 +285,7 @@ export default function Admin({ data }: { data: Catalog }) {
           <button disabled={busy} className="primary">
             {busy ? "جارٍ التحقق…" : "الدخول إلى لوحة التحكم"}
           </button>
-          <a href="./">
+          <a href={import.meta.env.BASE_URL + "store/"}>
             العودة إلى المتجر <ExternalLink size={15} />
           </a>
         </form>
@@ -320,7 +322,11 @@ export default function Admin({ data }: { data: Catalog }) {
             <br />
             في واجهة الزبائن.
           </p>
-          <a href="./" target="_blank" rel="noreferrer">
+          <a
+            href={import.meta.env.BASE_URL + "store/"}
+            target="_blank"
+            rel="noreferrer"
+          >
             عرض المتجر <ExternalLink size={16} />
           </a>
           <button
@@ -347,7 +353,12 @@ export default function Admin({ data }: { data: Catalog }) {
             </h1>
             <p>مساحة بسيطة لإدارة كل التفاصيل.</p>
           </div>
-          <a href="./" className="outline" target="_blank" rel="noreferrer">
+          <a
+            href={import.meta.env.BASE_URL + "store/"}
+            className="outline"
+            target="_blank"
+            rel="noreferrer"
+          >
             معاينة المتجر <ExternalLink size={17} />
           </a>
         </div>
@@ -545,7 +556,8 @@ export default function Admin({ data }: { data: Catalog }) {
                 entered &&
                 (data.products.some((p) => p.category === selected._id) ? (
                   <div className="admin-products">
-                    {data.products
+                    {[...data.products]
+                      .sort(newestFirst)
                       .filter((p) => p.category === selected._id)
                       .map((p) => (
                         <article key={p._id}>
@@ -553,7 +565,11 @@ export default function Admin({ data }: { data: Catalog }) {
                           <div>
                             <small>{selected.name}</small>
                             <h3>{p.title}</h3>
-                            <strong>{money(p.price)} د.ع</strong>
+                            <strong>
+                              {p.price === undefined
+                                ? "بدون سعر"
+                                : money(p.price) + " د.ع"}
+                            </strong>
                             <span
                               className={
                                 "stock inline " + (!p.available ? "out" : "")
@@ -751,7 +767,7 @@ function EditorForm({
           id: item?._id,
           category: category._id,
           title: val("title"),
-          price: Number(val("price")),
+          price: val("price").trim() === "" ? undefined : Number(val("price")),
           quantity:
             val("quantity") === "" ? undefined : Number(val("quantity")),
           available: f.get("available") === "on",
@@ -767,6 +783,16 @@ function EditorForm({
           headline: val("headline"),
           subtitle: val("subtitle"),
           banners: ids,
+          textStyles: Object.fromEntries(
+            ["name", "headline", "subtitle"].map((key) => [
+              key,
+              {
+                color: val(key + "Color"),
+                size: Number(val(key + "Size")),
+                decoration: val(key + "Decoration"),
+              },
+            ]),
+          ),
         });
       }
       if (active.current) saved();
@@ -999,7 +1025,7 @@ function EditorForm({
               </label>
               <div className="form-grid">
                 <label>
-                  السعر بالدينار العراقي
+                  السعر بالدينار العراقي (اختياري)
                   <input
                     type="number"
                     inputMode="decimal"
@@ -1007,7 +1033,6 @@ function EditorForm({
                     min="0"
                     max="1000000000000"
                     step="1"
-                    required
                     defaultValue={p?.price}
                     placeholder="25,000"
                   />
@@ -1039,6 +1064,12 @@ function EditorForm({
             </>
           ) : (
             <>
+              <TextControls
+                field="name"
+                title="اسم المتجر"
+                value={s.textStyles?.name}
+                size={22}
+              />
               <label>
                 اسم المتجر
                 <input
@@ -1048,6 +1079,12 @@ function EditorForm({
                   maxLength={100}
                 />
               </label>
+              <TextControls
+                field="headline"
+                title="عنوان البنر"
+                value={s.textStyles?.headline}
+                size={32}
+              />
               <label>
                 عنوان البنر
                 <input
@@ -1057,6 +1094,12 @@ function EditorForm({
                   maxLength={150}
                 />
               </label>
+              <TextControls
+                field="subtitle"
+                title="نص الإعلان"
+                value={s.textStyles?.subtitle}
+                size={18}
+              />
               <label>
                 نص الإعلان
                 <textarea
@@ -1089,6 +1132,55 @@ function EditorForm({
           </div>
         </form>
       </section>
+    </div>
+  );
+}
+
+function TextControls({
+  field,
+  title,
+  value,
+  size,
+}: {
+  field: string;
+  title: string;
+  value?: TextStyle;
+  size: number;
+}) {
+  return (
+    <div className="text-controls" role="group" aria-label={"تنسيق " + title}>
+      <label>
+        لون
+        <input
+          type="color"
+          name={field + "Color"}
+          defaultValue={value?.color ?? "#53796c"}
+        />
+      </label>
+      <label>
+        حجم
+        <input
+          type="number"
+          name={field + "Size"}
+          min="12"
+          max="64"
+          required
+          defaultValue={value?.size ?? size}
+        />
+      </label>
+      <label>
+        زخرفة
+        <select
+          name={field + "Decoration"}
+          defaultValue={value?.decoration ?? "plain"}
+        >
+          <option value="plain">عادي</option>
+          <option value="bold">عريض</option>
+          <option value="italic">مائل</option>
+          <option value="underline">تحته خط</option>
+          <option value="shadow">ظل</option>
+        </select>
+      </label>
     </div>
   );
 }

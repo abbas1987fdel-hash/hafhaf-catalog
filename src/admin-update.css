@@ -105,3 +105,23 @@
   }
 }
 
+.text-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+.text-controls label {
+  min-width: 0;
+  font-size: 12px;
+}
+.text-controls input,
+.text-controls select {
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  height: 40px;
+}
+.text-controls input[type="color"] {
+  padding: 3px;
+}

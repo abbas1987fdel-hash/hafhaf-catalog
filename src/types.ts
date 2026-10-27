@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 export type Category = {
   protected?: boolean;
   locked?: boolean;
@@ -10,16 +11,23 @@ export type Category = {
   imageUrl: string | null;
 };
 export type Product = {
+  _creationTime?: number;
   _id: string;
   category: string;
   title: string;
-  price: number;
+  price?: number;
   quantity?: number;
   available: boolean;
   image: string;
   imageUrl: string | null;
 };
+export type TextStyle = {
+  color: string;
+  size: number;
+  decoration: "plain" | "bold" | "italic" | "underline" | "shadow";
+};
 export type Settings = {
+  textStyles?: Record<"name" | "headline" | "subtitle", TextStyle>;
   name: string;
   headline: string;
   subtitle: string;
@@ -50,5 +58,36 @@ export function phoneNumber(s: string) {
 export function whatsapp(phone: string, text: string) {
   return (
     "https://wa.me/" + phoneNumber(phone) + "?text=" + encodeURIComponent(text)
+  );
+}
+
+// Creation time stays unchanged when an existing product is edited.
+export const newestFirst = (a: Product, b: Product) =>
+  (b._creationTime ?? 0) - (a._creationTime ?? 0) || b._id.localeCompare(a._id);
+
+export function textCSS(s?: TextStyle): CSSProperties | undefined {
+  return s
+    ? {
+        color: s.color,
+        fontSize: s.size,
+        fontWeight: s.decoration === "bold" ? 800 : 400,
+        fontStyle: s.decoration === "italic" ? "italic" : "normal",
+        textDecoration: s.decoration === "underline" ? "underline" : "none",
+        textShadow: s.decoration === "shadow" ? "1px 2px 3px #0007" : "none",
+        overflowWrap: "anywhere",
+      }
+    : undefined;
+}
+export function sumProducts(
+  products: Product[],
+  quantities: Record<string, number>,
+) {
+  return products.reduce(
+    (sum, p) =>
+      sum +
+      (p.available && p.price !== undefined
+        ? p.price * Math.min(quantities[p._id] || 0, p.quantity ?? 999)
+        : 0),
+    0,
   );
 }

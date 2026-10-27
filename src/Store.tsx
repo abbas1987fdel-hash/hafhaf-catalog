@@ -14,7 +14,16 @@ import {
   Pause,
   Play,
 } from "lucide-react";
-import { type Catalog, defaults, money, whatsapp } from "./types";
+import {
+  type Catalog,
+  defaults,
+  money,
+  whatsapp,
+  newestFirst,
+  textCSS,
+  sumProducts,
+  type Settings,
+} from "./types";
 import "./store-update.css";
 
 type Route = { category: string; product: string };
@@ -88,10 +97,12 @@ function Banner({
   urls,
   headline,
   subtitle,
+  styles,
 }: {
   urls: string[];
   headline: string;
   subtitle: string;
+  styles?: Settings["textStyles"];
 }) {
   const [step, setStep] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -139,12 +150,14 @@ function Banner({
       ) : (
         <div className="banner-frame banner-placeholder">
           <Package size={42} />
-          <h1>{headline}</h1>
+          <h1 style={textCSS(styles?.headline)}>{headline}</h1>
         </div>
       )}
       <div className="banner-caption">
-        {urls.length > 0 && <h1>{headline}</h1>}
-        <p>{subtitle}</p>
+        {urls.length > 0 && (
+          <h1 style={textCSS(styles?.headline)}>{headline}</h1>
+        )}
+        <p style={textCSS(styles?.subtitle)}>{subtitle}</p>
       </div>
     </section>
   );
@@ -152,6 +165,16 @@ function Banner({
 
 export default function Store({ data }: { data: Catalog }) {
   const { route, navigate, backTo } = useStoreRoute();
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const total = sumProducts(data.products, quantities);
+  const count = data.products.reduce(
+    (n, p) =>
+      n +
+      (p.available && p.price !== undefined
+        ? Math.min(quantities[p._id] || 0, p.quantity ?? 999)
+        : 0),
+    0,
+  );
   const [search, setSearch] = useState("");
   const [available, setAvailable] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -163,7 +186,7 @@ export default function Store({ data }: { data: Catalog }) {
   const selected = cats.find((c) => c._id === route.category);
   const categoryProducts = data.products
     .filter((p) => p.category === selected?._id)
-    .sort((a, b) => a.title.localeCompare(b.title, "ar"));
+    .sort(newestFirst);
   const gallery = categoryProducts.filter((p) => p.imageUrl);
   const photo = gallery.find((p) => p._id === route.product);
   const photoIndex = gallery.findIndex((p) => p._id === photo?._id);
@@ -209,6 +232,7 @@ export default function Store({ data }: { data: Catalog }) {
               urls={banners}
               headline={s.headline}
               subtitle={s.subtitle}
+              styles={s.textStyles}
             />
             <section id="catalog">
               <div className="section-title">
@@ -336,21 +360,65 @@ export default function Store({ data }: { data: Catalog }) {
                       <small>{selected.name}</small>
                       <h3>{p.title}</h3>
                       <div className="price">
-                        <strong>{money(p.price)}</strong>
-                        <span>د.ع</span>
+                        {p.price !== undefined && (
+                          <>
+                            <strong>{money(p.price)}</strong>
+                            <span>د.ع</span>
+                          </>
+                        )}
                         {p.quantity !== undefined && (
                           <small>الكمية: {money(p.quantity)}</small>
                         )}
                       </div>
+                      {p.price !== undefined && (
+                        <div className="product-add">
+                          <button
+                            type="button"
+                            className="primary"
+                            disabled={
+                              !p.available ||
+                              (quantities[p._id] || 0) >= (p.quantity ?? 999)
+                            }
+                            onClick={() =>
+                              setQuantities((q) => ({
+                                ...q,
+                                [p._id]: (q[p._id] || 0) + 1,
+                              }))
+                            }
+                          >
+                            إضافة +
+                          </button>
+                          {!!quantities[p._id] && (
+                            <>
+                              <output aria-label={"عدد " + p.title}>
+                                {Math.min(quantities[p._id], p.quantity ?? 999)}
+                              </output>
+                              <button
+                                type="button"
+                                className="outline"
+                                aria-label={"تقليل " + p.title}
+                                onClick={() =>
+                                  setQuantities((q) => ({
+                                    ...q,
+                                    [p._id]: Math.max(0, (q[p._id] || 0) - 1),
+                                  }))
+                                }
+                              >
+                                −
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                       <a
                         className="ask"
                         href={whatsapp(
                           selected.phone,
                           "مرحبًا، أستفسر عن " +
                             p.title +
-                            " بسعر " +
-                            money(p.price) +
-                            " د.ع",
+                            (p.price === undefined
+                              ? ""
+                              : " بسعر " + money(p.price) + " د.ع"),
                         )}
                         target="_blank"
                         rel="noreferrer"
@@ -375,17 +443,17 @@ export default function Store({ data }: { data: Catalog }) {
             )}
           </section>
         )}
-        <section className="contact-band">
-          <MessageCircle size={28} />
-          <div>
-            <h3>عندك سؤال عن منتج؟</h3>
-            <p>اختَر القسم وتواصل مباشرة مع فريقه عبر واتساب.</p>
-          </div>
-          <span>
-            نسعد بخدمتك <ArrowUpLeft size={20} />
-          </span>
-        </section>
       </main>
+      {count > 0 && (
+        <div className="sum-bar" role="status">
+          <strong>
+            المجموع: {money(total)} د.ع <small>({money(count)} قطعة)</small>
+          </strong>
+          <button className="outline" onClick={() => setQuantities({})}>
+            تصفير
+          </button>
+        </div>
+      )}
       {photo && (
         <dialog
           ref={dialog}
@@ -456,7 +524,7 @@ export default function Store({ data }: { data: Catalog }) {
           <div className="photo-caption" aria-live="polite">
             <h2>{photo.title}</h2>
             <p>
-              {money(photo.price)} د.ع{" "}
+              {photo.price !== undefined ? money(photo.price) + " د.ع" : ""}{" "}
               <span>
                 • {photoIndex + 1} / {gallery.length}
               </span>
@@ -464,11 +532,6 @@ export default function Store({ data }: { data: Catalog }) {
           </div>
         </dialog>
       )}
-      <footer>
-        <strong>{s.name}</strong>
-        <p>تصفح، اكتشف، وتواصل معنا.</p>
-        <small>جميع الأسعار بالدينار العراقي • عرض المنتجات حسب التوفر</small>
-      </footer>
     </>
   );
 }

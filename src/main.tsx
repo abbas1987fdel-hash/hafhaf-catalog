@@ -18,9 +18,11 @@ import "./style.css";
 import Store from "./Store";
 import Admin from "./Admin";
 import Install from "./Install";
-import { defaults, type Catalog } from "./types";
+import { defaults, textCSS, type Catalog } from "./types";
 import "./theme.css";
-const isAdmin = location.pathname.endsWith("admin.html");
+const isAdmin = location.pathname.startsWith(
+  import.meta.env.BASE_URL + "admin/",
+);
 class Boundary extends React.Component<
   { children: React.ReactNode },
   { failed: boolean }
@@ -118,12 +120,17 @@ function Shell({
           : "يا هلا بيك، اكتشف الموجود قبل ما تزورنا ✦"}
       </div>
       <header className="site-header">
-        <a href={isAdmin ? "./admin.html" : "./"} className="brand">
+        <a
+          href={import.meta.env.BASE_URL + (isAdmin ? "admin/" : "store/")}
+          className="brand"
+        >
           <span className="brand-mark">
             <StoreIcon size={25} />
           </span>
           <div>
-            <strong>{data?.settings?.name || defaults.name}</strong>
+            <strong style={textCSS(data?.settings?.textStyles?.name)}>
+              {data?.settings?.name || defaults.name}
+            </strong>
             <small>
               {isAdmin ? "لوحة إدارة المتجر" : "اختيارات أكثر، بمكان واحد"}
             </small>
@@ -191,6 +198,6 @@ createRoot(document.getElementById("root")!).render(
 if ("serviceWorker" in navigator && import.meta.env.PROD)
   navigator.serviceWorker
     .register(import.meta.env.BASE_URL + "sw.js", {
-      scope: import.meta.env.BASE_URL,
+      scope: import.meta.env.BASE_URL + (isAdmin ? "admin/" : "store/"),
     })
     .catch(() => {});

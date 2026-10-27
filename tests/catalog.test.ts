@@ -160,3 +160,53 @@ describe("catalog workflows", () => {
     );
   });
 });
+
+it("supports missing prices and clearing an existing price", async () => {
+  const { t, token } = await authorized();
+  const img = await image(t);
+  const category = await t.run((ctx) =>
+    ctx.db.insert("categories", {
+      name: "Test",
+      phone: "9647700000000",
+      image: img,
+    }),
+  );
+  const args = {
+    token,
+    category,
+    title: "No price",
+    image: img,
+    available: true,
+  };
+  await t.mutation(api.saveProduct, args);
+  let p = (await t.query(api.catalog, {})).products[0];
+  expect(p.price).toBeUndefined();
+  await t.mutation(api.saveProduct, { ...args, id: p._id, price: 0 });
+  p = (await t.query(api.catalog, {})).products[0];
+  expect(p.price).toBe(0);
+  await t.mutation(api.saveProduct, { ...args, id: p._id });
+  expect((await t.query(api.catalog, {})).products[0].price).toBeUndefined();
+});
+it("stores text styling, preserves it for older clients, and rejects invalid styling", async () => {
+  const { t, token } = await authorized();
+  const style = { color: "#123abc", size: 24, decoration: "bold" };
+  const args = { token, name: "Store", headline: "Headline", subtitle: "Text" };
+  const textStyles = { name: style, headline: style, subtitle: style };
+  await t.mutation(api.saveSettings, { ...args, textStyles });
+  await t.mutation(api.saveSettings, args);
+  expect((await t.query(api.catalog, {})).settings.textStyles).toEqual(
+    textStyles,
+  );
+  await expect(
+    t.mutation(api.saveSettings, {
+      ...args,
+      textStyles: { ...textStyles, headline: { ...style, size: 999 } },
+    }),
+  ).rejects.toThrow();
+  await expect(
+    t.mutation(api.saveSettings, {
+      ...args,
+      textStyles: { ...textStyles, name: { ...style, color: "url(bad)" } },
+    }),
+  ).rejects.toThrow();
+});

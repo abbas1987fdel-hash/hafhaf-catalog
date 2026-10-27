@@ -233,3 +233,34 @@
     animation: none;
   }
 }
+
+.product-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+.product-add button {
+  min-height: 40px;
+}
+.sum-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
+  background: var(--surface, #153e35);
+  color: var(--text, #fff);
+  box-shadow: 0 -2px 14px #0003;
+}
+.sum-bar small {
+  font-size: 12px;
+}
+body:has(.sum-bar) main {
+  padding-bottom: 110px;
+}

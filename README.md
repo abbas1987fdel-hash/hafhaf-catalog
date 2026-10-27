@@ -4,12 +4,12 @@ Arabic RTL catalog and separate admin entry, built with React, TypeScript, Vite 
 
 Store: https://abbas1987fdel-hash.github.io/hafhaf-catalog/
 
-Admin: https://abbas1987fdel-hash.github.io/hafhaf-catalog/admin.html
+Admin: https://abbas1987fdel-hash.github.io/hafhaf-catalog/admin/
 
 Convex production project: `bs-fdl:hafhaf-catalog:production`.
 
 - Customer storefront: `/`. No cart or checkout.
-- Admin application: `/admin.html`. Category, product, banner and store-name management.
+- Admin application: `/admin/`. Category, product, banner and store-name management.
 - Per-category WhatsApp support, IQD prices, optional quantity and stock status.
 - Uploads are resized to at most 1600px and converted to WebP in the browser. Server enforces WebP and a 1.5 MB limit.
 - Distinct installable customer/admin manifests. Installation requires browser support; iOS instructions are shown when the install prompt is unavailable.
@@ -40,3 +40,5 @@ Tests cover unauthorized writes, failed-PIN limits, logout, expiration, category
 Create a new project under the intended Convex account, deploy the backend with `npx convex deploy`, and set `ADMIN_PIN` on **production**. Set the GitHub repository variable `VITE_CONVEX_URL` to its production URL. Enable GitHub Pages with the GitHub Actions source and run the deployment workflow.
 
 Production provisioning is intentionally separate from local test data. Never deploy local test categories or secrets. `.env` files are ignored. The Pages workflow refuses to build without a configured cloud endpoint.
+
+PWA routes: `/store/` and `/admin/` have non-overlapping manifest and service-worker scopes. Legacy root/admin.html URLs redirect preserving query and hash. Manifest IDs remain stable for existing installs. If Android still captures both with an older broad-scope install, uninstall that old app without clearing site data and install both from the new routes. Browser shortcuts are not standalone installations.

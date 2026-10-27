@@ -1,3 +1,4 @@
+import { textStyles } from "./textStyle";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 export default defineSchema({
@@ -21,7 +22,7 @@ export default defineSchema({
   products: defineTable({
     category: v.id("categories"),
     title: v.string(),
-    price: v.number(),
+    price: v.optional(v.number()),
     quantity: v.optional(v.number()),
     available: v.boolean(),
     image: v.id("_storage"),
@@ -30,6 +31,7 @@ export default defineSchema({
     name: v.string(),
     banner: v.optional(v.id("_storage")),
     banners: v.optional(v.array(v.id("_storage"))),
+    textStyles: v.optional(textStyles),
     headline: v.string(),
     subtitle: v.string(),
   }),

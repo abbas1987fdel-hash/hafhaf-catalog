@@ -1,3 +1,4 @@
+import { textStyles } from "./textStyle";
 import {
   mutationGeneric as mutation,
   queryGeneric as query,
@@ -242,7 +243,7 @@ export const saveProduct = mutation({
     id: v.optional(v.id("products")),
     category: v.id("categories"),
     title: v.string(),
-    price: v.number(),
+    price: v.optional(v.number()),
     quantity: v.optional(v.number()),
     available: v.boolean(),
     image: v.id("_storage"),
@@ -258,7 +259,10 @@ export const saveProduct = mutation({
         fail("لا يمكن نقل المنتج إلى قسم آخر من هذه الشاشة");
     }
     await checkImage(ctx, a.image);
-    if (!Number.isFinite(a.price) || a.price < 0 || a.price > 1e12)
+    if (
+      a.price !== undefined &&
+      (!Number.isFinite(a.price) || a.price < 0 || a.price > 1e12)
+    )
       fail("السعر غير صحيح");
     if (
       a.quantity !== undefined &&
@@ -318,6 +322,7 @@ export const saveSettings = mutation({
   args: {
     token: v.string(),
     name: v.string(),
+    textStyles: v.optional(textStyles),
     headline: v.string(),
     subtitle: v.string(),
     banner: v.optional(v.id("_storage")),
@@ -326,6 +331,16 @@ export const saveSettings = mutation({
   handler: async (ctx, a) => {
     await requireAdmin(ctx, a.token);
     const old = await ctx.db.query("settings").first();
+    if (a.textStyles)
+      for (const style of Object.values(a.textStyles)) {
+        if (
+          !/^#[0-9a-f]{6}$/i.test(style.color) ||
+          !Number.isInteger(style.size) ||
+          style.size < 12 ||
+          style.size > 64
+        )
+          fail("تنسيق النص غير صحيح");
+      }
     const previous = old?.banners ?? (old?.banner ? [old.banner] : []);
     const banners = a.banners ?? (a.banner ? [a.banner] : previous);
     if (banners.length > 8 || new Set(banners).size !== banners.length)
@@ -333,6 +348,7 @@ export const saveSettings = mutation({
     for (const id of banners) await checkImage(ctx, id);
     const data = {
       name: clean(a.name),
+      textStyles: a.textStyles ?? old?.textStyles,
       headline: clean(a.headline, 150),
       subtitle: clean(a.subtitle, 250),
       banner: banners[0],
