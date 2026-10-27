@@ -1,0 +1,164 @@
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--green);
+  border-radius: 50%;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  background: #101b19;
+  color: #e6f0e8;
+  --green: #a9d3b2;
+  --lime: #d8ef8a;
+  --muted: #a3b7ab;
+  --line: #34483e;
+}
+[data-theme="dark"] body {
+  background: #101b19;
+  color: #e6f0e8;
+}
+[data-theme="dark"]
+  :is(
+    .site-header,
+    .product,
+    .category-card,
+    .admin-content,
+    .admin-categories article,
+    .admin-products article,
+    .stats > div,
+    .modal,
+    .login-card,
+    .install-panel,
+    .outline,
+    .search,
+    .filter,
+    .theme-toggle,
+    .icon-button,
+    .settings-preview
+  ) {
+  background: #1a2b25;
+  color: #e6f0e8;
+  border-color: var(--line);
+}
+[data-theme="dark"] :is(input, select, textarea) {
+  background: #12221c;
+  color: #eef5ef;
+  border-color: #4d6658;
+}
+[data-theme="dark"]
+  :is(.empty, .contact-band, .hero, .upload-field, .category-gate form) {
+  background: #22352a;
+  color: #e6f0e8;
+}
+[data-theme="dark"]
+  :is(
+    h1,
+    h2,
+    h3,
+    .empty h3,
+    .brand strong,
+    .price,
+    .category-card h3,
+    .category-card span,
+    .admin-heading h1,
+    .settings-preview h2
+  ) {
+  color: inherit;
+}
+[data-theme="dark"] .primary {
+  background: #b6d77b;
+  color: #172a1d;
+}
+[data-theme="dark"] .primary:hover {
+  background: #d2eba3;
+}
+[data-theme="dark"]
+  :is(
+    .subtle,
+    .hero-copy p,
+    .hero-foot,
+    .settings-preview p,
+    .upload-field span
+  ) {
+  color: #b7c9bb;
+}
+[data-theme="dark"] .row-actions button {
+  background: #304638;
+  color: #d9e8dc;
+}
+[data-theme="dark"] .admin-sidebar {
+  background: #15271f;
+  color: #e8f3e8;
+}
+[data-theme="dark"] .admin-sidebar button {
+  color: #cbdacf;
+}
+[data-theme="dark"] .admin-sidebar button.active {
+  background: #31482e;
+  color: #e6f8bd;
+}
+[data-theme="dark"] .stats .stat-icon {
+  background: #314831;
+  color: #cce8a6;
+}
+[data-theme="dark"] .product-image {
+  background: #26382f;
+}
+[data-theme="dark"] .error {
+  background: #4a2823;
+  color: #ffd4c8;
+}
+[data-theme="dark"] .success {
+  background: #23442a;
+  color: #d5efb9;
+}
+[data-theme="dark"] .stock {
+  background: #214832;
+  color: #d4f6dc;
+}
+[data-theme="dark"] .stock.out {
+  background: #49392b;
+  color: #f5d3b6;
+}
+[data-theme="dark"] .photo-viewer {
+  color: white;
+  background: #08100ff5;
+}
+[data-theme="dark"] .zoom-hint {
+  background: #15291fd9;
+  color: white;
+}
+@media (max-width: 600px) {
+  .header-end {
+    gap: 8px;
+  }
+  .theme-toggle {
+    width: 38px;
+    height: 38px;
+  }
+  .brand strong {
+    font-size: 14px;
+  }
+}
+[data-theme="dark"] .topline {
+  background: #153e35;
+  color: #ecf4da;
+}
+[data-theme="dark"] .banner-placeholder {
+  background: #22352a;
+  color: #e6f0e8;
+}
+.install-panel {
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+.install-panel::backdrop {
+  background: #07161180;
+}

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useMutation } from "convex/react";
 import { anyApi } from "convex/server";
 import {
@@ -14,6 +14,10 @@ import {
   ShieldCheck,
   X,
   CheckCircle2,
+  ArrowRight,
+  ArrowUp,
+  ArrowDown,
+  LockKeyhole,
 } from "lucide-react";
 import {
   type Catalog,
@@ -24,15 +28,36 @@ import {
   phoneNumber,
 } from "./types";
 import { toWebP } from "./images";
+import "./admin-update.css";
 const api = anyApi.catalog;
 type Editor = {
   kind: "category" | "product" | "settings";
   item?: Category | Product;
 };
+type Route = { tab: string; category: string; editor: string; item: string };
+function readRoute(): Route {
+  const p = new URLSearchParams(location.hash.slice(1));
+  return {
+    tab: ["categories", "products", "settings"].includes(p.get("tab") || "")
+      ? p.get("tab")!
+      : "categories",
+    category: p.get("category") || "",
+    editor: p.get("editor") || "",
+    item: p.get("item") || "",
+  };
+}
+function routeHash(r: Partial<Route>) {
+  const p = new URLSearchParams();
+  if (r.tab && r.tab !== "categories") p.set("tab", r.tab);
+  if (r.category) p.set("category", r.category);
+  if (r.editor) p.set("editor", r.editor);
+  if (r.item) p.set("item", r.item);
+  return p.size ? "#" + p.toString() : "";
+}
 const errorText = (e: unknown) => {
-  const data = (e as { data?: unknown })?.data;
-  return typeof data === "string"
-    ? data
+  const d = (e as { data?: unknown })?.data;
+  return typeof d === "string"
+    ? d
     : e instanceof Error
       ? e.message
       : "تعذر الحفظ، حاول مجددًا";
@@ -42,15 +67,115 @@ export default function Admin({ data }: { data: Catalog }) {
     () => sessionStorage.getItem("hafhaf-admin") || "",
   );
   const [pin, setPin] = useState("");
-  const [tab, setTab] = useState("categories");
+  const [route, setRoute] = useState(readRoute);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [editor, setEditor] = useState<Editor | null>(null);
+  const [grant, setGrant] = useState<{
+    category: string;
+    token: string;
+    code?: string;
+  } | null>(null);
+  const [categoryPin, setCategoryPin] = useState("");
   const login = useMutation(api.login),
     logout = useMutation(api.logout),
-    remove = useMutation(api.remove);
+    remove = useMutation(api.remove),
+    unlock = useMutation(api.unlockCategory);
   const s = data.settings || defaults;
+  const cats = [...data.categories].sort((a, b) =>
+    a.name.localeCompare(b.name, "ar"),
+  );
+  const selected = cats.find((c) => c._id === route.category);
+  const protectedCategory = !!selected?.protected;
+  const entered =
+    !!selected && (!protectedCategory || grant?.category === selected._id);
+  const categoryToken =
+    grant?.category === selected?._id ? grant?.token : undefined;
+  useEffect(() => {
+    const initial = readRoute();
+    if (
+      !history.state?.hafhafAdmin &&
+      (initial.category || initial.editor || initial.tab !== "categories")
+    ) {
+      const base = location.pathname + location.search;
+      history.replaceState({ hafhafAdmin: true }, "", base);
+      let parent = "";
+      const section = routeHash({
+        tab: initial.tab,
+        category: initial.category,
+      });
+      if (section) {
+        history.pushState({ hafhafAdmin: true, parent }, "", base + section);
+        parent = section;
+      }
+      if (initial.editor)
+        history.pushState(
+          { hafhafAdmin: true, parent },
+          "",
+          base + routeHash(initial),
+        );
+    }
+    const sync = () => setRoute(readRoute());
+    addEventListener("popstate", sync);
+    addEventListener("hashchange", sync);
+    return () => {
+      removeEventListener("popstate", sync);
+      removeEventListener("hashchange", sync);
+    };
+  }, []);
+  useEffect(() => {
+    setGrant((g) => (g?.category === route.category ? g : null));
+    setCategoryPin("");
+    setError("");
+  }, [route.category]);
+  const go = (r: Partial<Route>, replace = false) => {
+    const hash = routeHash(r);
+    if (hash === location.hash) return;
+    history[replace ? "replaceState" : "pushState"](
+      { hafhafAdmin: true, parent: location.hash },
+      "",
+      location.pathname + location.search + hash,
+    );
+    setRoute(readRoute());
+    setError("");
+    setSuccess("");
+  };
+  const back = (fallback: Partial<Route>) => {
+    if (history.state?.hafhafAdmin && typeof history.state.parent === "string")
+      history.back();
+    else go(fallback, true);
+  };
+  const enter = (c: Category, edit = false) => {
+    setGrant(null);
+    setCategoryPin("");
+    go({
+      tab: "products",
+      category: c._id,
+    });
+    if (edit)
+      go({ tab: "products", category: c._id, editor: "category", item: c._id });
+  };
+  const closeEditor = () => back({ tab: route.tab, category: route.category });
+  const editor: Editor | null =
+    route.editor === "settings"
+      ? { kind: "settings" }
+      : route.editor === "category" && (!route.item || entered)
+        ? {
+            kind: "category",
+            item: route.item
+              ? { ...selected!, accessCode: grant?.code }
+              : undefined,
+          }
+        : route.editor === "product" && entered
+          ? {
+              kind: "product",
+              item: route.item
+                ? data.products.find(
+                    (p) => p._id === route.item && p.category === selected._id,
+                  )
+                : undefined,
+            }
+          : null;
   const perform = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
@@ -79,6 +204,32 @@ export default function Admin({ data }: { data: Catalog }) {
       }
     } catch {
       setError("تعذر الاتصال، تحقق من الإنترنت وحاول مجددًا");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function openProtected(e: FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await unlock({
+        adminToken: token,
+        category: selected._id,
+        code: categoryPin,
+      });
+      if (r.error) setError(r.error);
+      else {
+        setGrant({
+          category: selected._id,
+          token: r.token,
+          code: r.accessCode,
+        });
+        setCategoryPin("");
+      }
+    } catch (e) {
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -150,11 +301,11 @@ export default function Admin({ data }: { data: Catalog }) {
             ["settings", "البنر والمتجر", ImagePlus],
           ].map(([id, label, Icon]) => (
             <button
-              className={tab === id ? "active" : ""}
+              className={route.tab === id ? "active" : ""}
               key={id as string}
               onClick={() => {
-                setTab(id as string);
-                setError("");
+                setGrant(null);
+                go({ tab: id as string });
               }}
             >
               <Icon size={20} />
@@ -179,6 +330,8 @@ export default function Admin({ data }: { data: Catalog }) {
               sessionStorage.removeItem("hafhaf-admin");
               dispatchEvent(new Event("hafhaf-auth"));
               setToken("");
+              setGrant(null);
+              go({}, true);
             }}
           >
             <LogOut size={17} /> تسجيل الخروج
@@ -204,7 +357,7 @@ export default function Admin({ data }: { data: Catalog }) {
               <LayoutGrid />
             </span>
             <small>أقسام المتجر</small>
-            <strong>{money(data.categories.length)}</strong>
+            <strong>{money(cats.length)}</strong>
           </div>
           <div>
             <span className="stat-icon">
@@ -234,173 +387,255 @@ export default function Admin({ data }: { data: Catalog }) {
           </div>
         )}
         <section className="admin-content">
-          <div className="section-title">
-            <div>
-              <h2>
-                {tab === "categories"
-                  ? "أقسام المتجر"
-                  : tab === "products"
-                    ? "إدارة المنتجات"
-                    : "واجهة المتجر والإعلان"}
-              </h2>
-              <p>
-                {tab === "categories"
-                  ? "كل قسم له صورته ورقم الدعم الخاص به."
-                  : tab === "products"
-                    ? "حدّث الأسعار والتوفر، وخلي الزبائن بالصورة."
-                    : "أول انطباع يبدأ من هنا."}
-              </p>
-            </div>
+          {route.category && (
             <button
-              className="primary"
-              disabled={busy || (tab === "products" && !data.categories.length)}
-              onClick={() =>
-                setEditor({
-                  kind:
-                    tab === "categories"
-                      ? "category"
-                      : tab === "products"
-                        ? "product"
-                        : "settings",
-                })
-              }
+              className="outline admin-back"
+              onClick={() => back({ tab: route.tab })}
             >
-              <Plus size={18} />
-              {tab === "categories"
-                ? "إنشاء قسم"
-                : tab === "products"
-                  ? "رفع منتج"
-                  : "تعديل الواجهة"}
+              <ArrowRight size={18} /> العودة إلى الأقسام
             </button>
-          </div>
-          {tab === "categories" &&
-            (data.categories.length ? (
-              <div className="admin-categories">
-                {data.categories.map((c) => (
-                  <article key={c._id}>
-                    <img src={c.imageUrl || ""} alt={c.name} />
-                    <div>
-                      <h3>{c.name}</h3>
-                      <p dir="ltr">+{c.phone}</p>
-                      <small>
-                        {
-                          data.products.filter((p) => p.category === c._id)
-                            .length
-                        }{" "}
-                        منتجات
-                      </small>
-                    </div>
-                    <div className="row-actions">
-                      <button
-                        aria-label={"تعديل " + c.name}
-                        onClick={() => setEditor({ kind: "category", item: c })}
-                      >
-                        <Pencil size={17} />
-                      </button>
-                      <button
-                        disabled={busy}
-                        aria-label={"حذف " + c.name}
-                        onClick={() => {
-                          if (
-                            confirm(
-                              "حذف قسم " +
-                                c.name +
-                                "؟ لا يمكن حذف قسم يحتوي منتجات.",
-                            )
-                          )
-                            void perform(() =>
-                              remove({ token, category: c._id }),
-                            );
-                        }}
-                      >
-                        <Trash2 size={17} />
-                      </button>
-                    </div>
-                  </article>
-                ))}
+          )}
+          {selected && !entered ? (
+            <form className="admin-pin-gate" onSubmit={openProtected}>
+              <span className="app-icon">
+                <LockKeyhole />
+              </span>
+              <h2>دخول إدارة {selected.name}</h2>
+              <p>هذا الرمز خاص بالإدارة. الزبائن يشاهدون القسم بدون رمز.</p>
+              <label>
+                رمز دخول القسم
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={categoryPin}
+                  onChange={(e) => setCategoryPin(e.target.value)}
+                  required
+                  minLength={4}
+                  maxLength={64}
+                />
+              </label>
+              <button className="primary" disabled={busy}>
+                {busy ? "جارٍ التحقق…" : "دخول القسم"}
+              </button>
+            </form>
+          ) : (
+            <>
+              <div className="section-title">
+                <div>
+                  <h2>
+                    {selected
+                      ? selected.name
+                      : route.tab === "settings"
+                        ? "واجهة المتجر والإعلان"
+                        : route.tab === "products"
+                          ? "اختر قسمًا لإدارة منتجاته"
+                          : "أقسام المتجر"}
+                  </h2>
+                  <p>
+                    {selected
+                      ? "حدّث منتجات هذا القسم وأسعاره وتوفره."
+                      : route.tab === "settings"
+                        ? "بنرات متحركة تظهر للزبائن كل خمس ثوانٍ."
+                        : "لكل قسم رمز إدارة مستقل وصورة ورقم واتساب."}
+                  </p>
+                </div>
+                {(route.tab !== "products" || selected) && (
+                  <button
+                    className="primary"
+                    disabled={busy}
+                    onClick={() =>
+                      go({
+                        ...route,
+                        editor:
+                          route.tab === "settings"
+                            ? "settings"
+                            : selected
+                              ? "product"
+                              : "category",
+                        item: "",
+                      })
+                    }
+                  >
+                    <Plus size={18} />
+                    {route.tab === "settings"
+                      ? "تعديل الواجهة"
+                      : selected
+                        ? "رفع منتج"
+                        : "إنشاء قسم"}
+                  </button>
+                )}
               </div>
-            ) : (
-              <Empty
-                text="ابدأ بإنشاء أول قسم"
-                sub="أضف صورة القسم واسمه ورقم واتساب للدعم."
-              />
-            ))}
-          {tab === "products" &&
-            (data.products.length ? (
-              <div className="admin-products">
-                {data.products.map((p) => (
-                  <article key={p._id}>
-                    <img src={p.imageUrl || ""} alt={p.title} />
-                    <div>
-                      <small>
-                        {
-                          data.categories.find((c) => c._id === p.category)
-                            ?.name
-                        }
-                      </small>
-                      <h3>{p.title}</h3>
-                      <strong>{money(p.price)} د.ع</strong>
-                      <span
-                        className={
-                          "stock inline " + (!p.available ? "out" : "")
-                        }
-                      >
-                        {p.available ? "متوفر" : "غير متوفر"}
-                        {p.quantity !== undefined ? " • " + p.quantity : ""}
-                      </span>
-                    </div>
-                    <div className="row-actions">
-                      <button
-                        aria-label={"تعديل " + p.title}
-                        onClick={() => setEditor({ kind: "product", item: p })}
-                      >
-                        <Pencil size={17} />
-                      </button>
-                      <button
-                        disabled={busy}
-                        aria-label={"حذف " + p.title}
-                        onClick={() => {
-                          if (confirm("حذف المنتج " + p.title + " نهائيًا؟"))
-                            void perform(() =>
-                              remove({ token, product: p._id }),
-                            );
-                        }}
-                      >
-                        <Trash2 size={17} />
-                      </button>
-                    </div>
-                  </article>
+              {selected && entered && (
+                <div className="admin-category-tools">
+                  <button
+                    className="outline"
+                    onClick={() =>
+                      go({ ...route, editor: "category", item: selected._id })
+                    }
+                  >
+                    <Pencil size={17} /> تعديل القسم والرمز
+                  </button>
+                  <button
+                    className="subtle"
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          "حذف قسم " +
+                            selected.name +
+                            "؟ لا يمكن حذف قسم يحتوي منتجات.",
+                        )
+                      )
+                        void perform(async () => {
+                          await remove({
+                            token,
+                            categoryToken,
+                            category: selected._id,
+                          });
+                          setGrant(null);
+                          go({ tab: "categories" }, true);
+                        });
+                    }}
+                  >
+                    <Trash2 size={17} /> حذف القسم
+                  </button>
+                </div>
+              )}
+              {!selected &&
+                route.tab !== "settings" &&
+                (cats.length ? (
+                  <div className="admin-categories">
+                    {cats.map((c) => (
+                      <article key={c._id}>
+                        <img src={c.imageUrl || ""} alt={c.name} />
+                        <div>
+                          <h3>{c.name}</h3>
+                          <p dir="ltr">+{c.phone}</p>
+                          <small>
+                            {c.productCount ??
+                              data.products.filter((p) => p.category === c._id)
+                                .length}{" "}
+                            منتجات
+                          </small>
+                          <button
+                            className="outline category-enter"
+                            onClick={() => enter(c)}
+                          >
+                            <LockKeyhole size={16} /> دخول القسم
+                          </button>
+                        </div>
+                        <div className="row-actions">
+                          <button
+                            aria-label={"تعديل " + c.name}
+                            onClick={() => enter(c, true)}
+                          >
+                            <Pencil size={17} />
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty
+                    text="ابدأ بإنشاء أول قسم"
+                    sub="أضف صورة القسم واسمه ورمز إدارته ورقم واتساب للدعم."
+                  />
                 ))}
-              </div>
-            ) : (
-              <Empty
-                text={
-                  data.categories.length
-                    ? "أضف أول منتج للمتجر"
-                    : "أنشئ قسمًا أولًا"
-                }
-                sub="الصورة، العنوان، والسعر… وباقي التفاصيل اختيارك."
-              />
-            ))}
-          {tab === "settings" && (
-            <div className="settings-preview">
-              {s.bannerUrl && <img src={s.bannerUrl} alt="البنر الحالي" />}
-              <span className="eyebrow">معاينة الإعلان</span>
-              <h2>{s.headline}</h2>
-              <p>{s.subtitle}</p>
-              <small>اسم المتجر: {s.name}</small>
-            </div>
+              {selected &&
+                entered &&
+                (data.products.some((p) => p.category === selected._id) ? (
+                  <div className="admin-products">
+                    {data.products
+                      .filter((p) => p.category === selected._id)
+                      .map((p) => (
+                        <article key={p._id}>
+                          <img src={p.imageUrl || ""} alt={p.title} />
+                          <div>
+                            <small>{selected.name}</small>
+                            <h3>{p.title}</h3>
+                            <strong>{money(p.price)} د.ع</strong>
+                            <span
+                              className={
+                                "stock inline " + (!p.available ? "out" : "")
+                              }
+                            >
+                              {p.available ? "متوفر" : "غير متوفر"}
+                              {p.quantity !== undefined
+                                ? " • " + p.quantity
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="row-actions">
+                            <button
+                              aria-label={"تعديل " + p.title}
+                              onClick={() =>
+                                go({ ...route, editor: "product", item: p._id })
+                              }
+                            >
+                              <Pencil size={17} />
+                            </button>
+                            <button
+                              disabled={busy}
+                              aria-label={"حذف " + p.title}
+                              onClick={() => {
+                                if (
+                                  confirm("حذف المنتج " + p.title + " نهائيًا؟")
+                                )
+                                  void perform(() =>
+                                    remove({
+                                      token,
+                                      categoryToken,
+                                      product: p._id,
+                                    }),
+                                  );
+                              }}
+                            >
+                              <Trash2 size={17} />
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                  </div>
+                ) : (
+                  <Empty
+                    text="أضف أول منتج لهذا القسم"
+                    sub="الصورة والعنوان والسعر، والكمية اختيارية."
+                  />
+                ))}
+              {route.tab === "settings" && !selected && (
+                <div className="settings-preview">
+                  {(s.bannerUrls?.length
+                    ? s.bannerUrls
+                    : s.bannerUrl
+                      ? [s.bannerUrl]
+                      : []
+                  ).map((url, i) => (
+                    <img key={url + i} src={url} alt={"البنر " + (i + 1)} />
+                  ))}
+                  <span className="eyebrow">معاينة الإعلان</span>
+                  <h2>{s.headline}</h2>
+                  <p>{s.subtitle}</p>
+                  <small>اسم المتجر: {s.name}</small>
+                </div>
+              )}
+            </>
           )}
         </section>
       </main>
       {editor && (
         <EditorForm
+          key={route.editor + route.item}
           editor={editor}
           token={token}
+          categoryToken={categoryToken}
+          category={selected}
           data={data}
-          close={() => setEditor(null)}
+          close={closeEditor}
           saved={() => {
-            setEditor(null);
+            if (editor.kind === "category" && selected) {
+              setGrant(null);
+              go({ tab: "categories" }, true);
+            } else closeEditor();
             setSuccess("تم الحفظ، التعديل ظاهر الآن للزبائن");
           }}
         />
@@ -417,47 +652,72 @@ function Empty({ text, sub }: { text: string; sub: string }) {
     </div>
   );
 }
+type BannerItem = { id?: string; url: string; file?: File };
 function EditorForm({
   editor,
   token,
+  categoryToken,
+  category,
   data,
   close,
   saved,
 }: {
   editor: Editor;
   token: string;
+  categoryToken?: string;
+  category?: Category;
   data: Catalog;
   close: () => void;
   saved: () => void;
 }) {
-  const item = editor.item;
-  const c = item as Category | undefined,
-    p = item as Product | undefined;
-  const s = data.settings || defaults;
+  const item = editor.item,
+    c = item as Category | undefined,
+    p = item as Product | undefined,
+    s = data.settings || defaults;
   const [file, setFile] = useState<File | null>(null),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState("");
+    [busy, setBusy] = useState(false),
+    [preview, setPreview] = useState("");
+  const [banners, setBanners] = useState<BannerItem[]>(() => {
+    const ids = s.banners ?? (s.banner ? [s.banner] : []);
+    const urls = s.bannerUrls ?? (s.bannerUrl ? [s.bannerUrl] : []);
+    return ids.map((id, i) => ({ id, url: urls[i] || "" }));
+  });
+  const ownedUrls = useRef(new Set<string>()),
+    active = useRef(true),
+    dialogRef = useRef<HTMLElement>(null);
   const uploadUrl = useMutation(api.uploadUrl),
     saveC = useMutation(api.saveCategory),
     saveP = useMutation(api.saveProduct),
     saveS = useMutation(api.saveSettings),
     discard = useMutation(api.discardUpload);
-  const closeForm = () => {
-    if (preview) URL.revokeObjectURL(preview);
-    close();
+  useEffect(() => {
+    active.current = true;
+    const old = document.body.style.overflow;
+    const previous = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => {
+      active.current = false;
+      document.body.style.overflow = old;
+      previous?.focus();
+      for (const url of ownedUrls.current) URL.revokeObjectURL(url);
+    };
+  }, []);
+  const makeUrl = (f: File) => {
+    const url = URL.createObjectURL(f);
+    ownedUrls.current.add(url);
+    return url;
   };
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setBusy(true);
     const f = new FormData(e.currentTarget);
-    let uploaded: string | undefined;
+    const uploaded: string[] = [];
     try {
-      let image =
-        item?.image || (editor.kind === "settings" ? s.banner : undefined);
-      if (file) {
-        const blob = await toWebP(file);
+      async function upload(f: File) {
+        const blob = await toWebP(f);
         const url = await uploadUrl({ token });
         const r = await fetch(url, {
           method: "POST",
@@ -465,26 +725,31 @@ function EditorForm({
           body: blob,
         });
         if (!r.ok) throw Error("تعذر رفع الصورة");
-        uploaded = (await r.json()).storageId;
-        image = uploaded;
+        const id = (await r.json()).storageId as string;
+        uploaded.push(id);
+        return id;
       }
+      let image = item?.image;
+      if (file) image = await upload(file);
       const val = (key: string) => String(f.get(key) || "").trim();
       if (editor.kind === "category") {
         if (!image) throw Error("أضف صورة القسم");
         await saveC({
-          accessCode: val("accessCode"),
           token,
+          categoryToken,
           id: item?._id,
           name: val("name"),
           phone: phoneNumber(val("phone")),
           image,
+          accessCode: val("accessCode"),
         });
       } else if (editor.kind === "product") {
-        if (!image) throw Error("أضف صورة المنتج");
+        if (!image || !category) throw Error("أضف صورة المنتج واختر القسم");
         await saveP({
           token,
+          categoryToken,
           id: item?._id,
-          category: val("category"),
+          category: category._id,
           title: val("title"),
           price: Number(val("price")),
           quantity:
@@ -492,30 +757,64 @@ function EditorForm({
           available: f.get("available") === "on",
           image,
         });
-      } else
+      } else {
+        const ids: string[] = [];
+        for (const b of banners)
+          ids.push(b.file ? await upload(b.file) : b.id!);
         await saveS({
           token,
           name: val("name"),
           headline: val("headline"),
           subtitle: val("subtitle"),
-          banner: image,
+          banners: ids,
         });
-      if (preview) URL.revokeObjectURL(preview);
-      saved();
+      }
+      if (active.current) saved();
     } catch (err) {
-      setError(errorText(err));
-      if (uploaded) await discard({ token, image: uploaded }).catch(() => {});
+      if (active.current) setError(errorText(err));
+      await Promise.all(
+        uploaded.map((image) => discard({ token, image }).catch(() => {})),
+      );
     } finally {
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   }
+  const reorder = (index: number, delta: number) =>
+    setBanners((list) => {
+      const next = [...list];
+      [next[index], next[index + delta]] = [next[index + delta], next[index]];
+      return next;
+    });
   return (
     <div className="modal-backdrop">
       <section
+        ref={dialogRef}
         className="modal"
         role="dialog"
         aria-modal="true"
         aria-label="تحرير المحتوى"
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && !busy) {
+            e.preventDefault();
+            close();
+          }
+          if (e.key === "Tab") {
+            const nodes = [
+              ...e.currentTarget.querySelectorAll<HTMLElement>(
+                "button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]",
+              ),
+            ];
+            const first = nodes[0],
+              last = nodes.at(-1);
+            if (e.shiftKey && document.activeElement === first) {
+              e.preventDefault();
+              last?.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+              e.preventDefault();
+              first?.focus();
+            }
+          }
+        }}
       >
         <div className="modal-title">
           <div>
@@ -536,48 +835,110 @@ function EditorForm({
             className="icon-button"
             aria-label="إغلاق المحرر"
             disabled={busy}
-            onClick={closeForm}
+            onClick={close}
           >
             <X />
           </button>
         </div>
         <form onSubmit={submit}>
-          <label className="upload-field">
-            {preview ||
-            item?.imageUrl ||
-            (editor.kind === "settings" && s.bannerUrl) ? (
-              <img
-                src={preview || item?.imageUrl || s.bannerUrl || ""}
-                alt="معاينة الصورة"
+          {editor.kind === "settings" ? (
+            <div className="banner-editor">
+              <label className="upload-field">
+                <ImagePlus size={30} />
+                <strong>إضافة صور البنرات</strong>
+                <span>حتى 8 صور • القياس 2.35:1 • تتحول تلقائيًا إلى WebP</span>
+                <input
+                  type="file"
+                  multiple
+                  aria-label="إضافة صور البنرات"
+                  accept="image/jpeg,image/png,image/webp,image/avif"
+                  disabled={busy || banners.length >= 8}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length + banners.length > 8) {
+                      setError("يمكن إضافة 8 بنرات كحد أقصى");
+                      e.target.value = "";
+                      return;
+                    }
+                    setError("");
+                    setBanners((list) => [
+                      ...list,
+                      ...files.map((file) => ({ file, url: makeUrl(file) })),
+                    ]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <div className="banner-editor-list">
+                {banners.map((b, i) => (
+                  <div className="banner-editor-item" key={b.url + i}>
+                    <img src={b.url} alt={"معاينة البنر " + (i + 1)} />
+                    <div>
+                      <span>البنر {i + 1}</span>
+                      <button
+                        type="button"
+                        aria-label={"تقديم البنر " + (i + 1)}
+                        disabled={busy || i === 0}
+                        onClick={() => reorder(i, -1)}
+                      >
+                        <ArrowUp size={17} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={"تأخير البنر " + (i + 1)}
+                        disabled={busy || i === banners.length - 1}
+                        onClick={() => reorder(i, 1)}
+                      >
+                        <ArrowDown size={17} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={"إزالة البنر " + (i + 1)}
+                        disabled={busy}
+                        onClick={() =>
+                          setBanners((list) => list.filter((_, j) => j !== i))
+                        }
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <label className="upload-field">
+              {preview || item?.imageUrl ? (
+                <img
+                  src={preview || item?.imageUrl || ""}
+                  alt="معاينة الصورة"
+                />
+              ) : (
+                <Upload size={32} />
+              )}
+              <strong>
+                {file
+                  ? file.name
+                  : editor.kind === "category"
+                    ? "صورة القسم"
+                    : "صورة المنتج"}
+              </strong>
+              <span>اضغط لاختيار صورة • تتحول تلقائيًا إلى WebP</span>
+              <input
+                type="file"
+                aria-label="اختيار صورة"
+                accept="image/jpeg,image/png,image/webp,image/avif"
+                disabled={busy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) {
+                    setFile(f);
+                    setPreview(makeUrl(f));
+                  }
+                }}
               />
-            ) : (
-              <Upload size={32} />
-            )}
-            <strong>
-              {file
-                ? file.name
-                : editor.kind === "category"
-                  ? "صورة القسم"
-                  : editor.kind === "product"
-                    ? "صورة المنتج"
-                    : "صورة البنر (اختياري)"}
-            </strong>
-            <span>اضغط لاختيار صورة • تتحول تلقائيًا إلى WebP</span>
-            <input
-              type="file"
-              aria-label="اختيار صورة"
-              accept="image/jpeg,image/png,image/webp,image/avif"
-              disabled={busy}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  if (preview) URL.revokeObjectURL(preview);
-                  setFile(f);
-                  setPreview(URL.createObjectURL(f));
-                }
-              }}
-            />
-          </label>
+            </label>
+          )}
           {editor.kind === "category" ? (
             <>
               <label>
@@ -604,7 +965,7 @@ function EditorForm({
               </label>
               <small>استخدم رقم الدعم مع رمز الدولة، مثل 964 للعراق.</small>
               <label>
-                رمز دخول القسم
+                رمز دخول القسم للإدارة
                 <input
                   name="accessCode"
                   required
@@ -612,32 +973,19 @@ function EditorForm({
                   maxLength={64}
                   defaultValue={c?.accessCode || ""}
                   autoComplete="off"
-                  placeholder="رمز خاص بهذا القسم"
+                  placeholder="رمز خاص بإدارة هذا القسم"
                 />
               </label>
               <small>
-                يطلبه الزبون قبل مشاهدة المنتجات. تغيير الرمز يلغي صلاحية الرموز
-                السابقة.
+                يُطلب عند دخول القسم من الإدارة فقط. تغيير الرمز يتطلب إدخاله
+                مجددًا.
               </small>
             </>
           ) : editor.kind === "product" ? (
             <>
               <label>
                 القسم
-                <select
-                  name="category"
-                  required
-                  defaultValue={p?.category || ""}
-                >
-                  <option value="" disabled>
-                    اختر قسم المنتج
-                  </option>
-                  {data.categories.map((c) => (
-                    <option value={c._id} key={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <input value={category?.name || ""} readOnly />
               </label>
               <label>
                 عنوان المنتج
@@ -728,13 +1076,13 @@ function EditorForm({
           )}
           <div className="form-actions">
             <button disabled={busy} className="primary" type="submit">
-              {busy ? "جارٍ ضغط الصورة والحفظ…" : "حفظ ونشر"}
+              {busy ? "جارٍ ضغط الصور والحفظ…" : "حفظ ونشر"}
             </button>
             <button
               type="button"
               disabled={busy}
               className="subtle"
-              onClick={closeForm}
+              onClick={close}
             >
               إلغاء
             </button>

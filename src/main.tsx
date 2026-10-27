@@ -7,12 +7,19 @@ import {
   useConvexConnectionState,
 } from "convex/react";
 import { anyApi } from "convex/server";
-import { Store as StoreIcon, ShieldCheck, WifiOff } from "lucide-react";
+import {
+  Store as StoreIcon,
+  ShieldCheck,
+  WifiOff,
+  Sun,
+  Moon,
+} from "lucide-react";
+import "./style.css";
 import Store from "./Store";
 import Admin from "./Admin";
 import Install from "./Install";
 import { defaults, type Catalog } from "./types";
-import "./style.css";
+import "./theme.css";
 const isAdmin = location.pathname.endsWith("admin.html");
 class Boundary extends React.Component<
   { children: React.ReactNode },
@@ -47,19 +54,10 @@ function Live() {
       clearInterval(timer);
     };
   }, []);
-  let accessTokens: string[] = [];
-  try {
-    const stored = JSON.parse(
-      sessionStorage.getItem("hafhaf-categories") || "[]",
-    );
-    if (Array.isArray(stored))
-      accessTokens = stored.filter((t) => typeof t === "string").slice(-100);
-  } catch {}
   const data = useQuery(anyApi.catalog.catalog, {
     adminToken: isAdmin
       ? sessionStorage.getItem("hafhaf-admin") || undefined
       : undefined,
-    accessTokens,
     refresh: revision,
   }) as Catalog | undefined;
   const lastData = useRef<Catalog | undefined>(undefined);
@@ -79,6 +77,29 @@ function Shell({
   data?: Catalog;
   connected?: boolean;
 }) {
+  const [dark, setDark] = useState(() => {
+    try {
+      const saved = localStorage.getItem("hafhaf-theme");
+      return saved
+        ? saved === "dark"
+        : matchMedia("(prefers-color-scheme: dark)").matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    try {
+      localStorage.setItem("hafhaf-theme", dark ? "dark" : "light");
+    } catch {}
+  }, [dark]);
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.key === "hafhaf-theme") setDark(event.newValue === "dark");
+    };
+    addEventListener("storage", sync);
+    return () => removeEventListener("storage", sync);
+  }, []);
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
     const cb = () => setOnline(navigator.onLine);
@@ -109,6 +130,14 @@ function Shell({
           </div>
         </a>
         <div className="header-end">
+          <button
+            className="theme-toggle icon-button"
+            aria-label={dark ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+            title={dark ? "الوضع النهاري" : "الوضع الليلي"}
+            onClick={() => setDark(!dark)}
+          >
+            {dark ? <Sun size={21} /> : <Moon size={21} />}
+          </button>
           {isAdmin ? (
             <span className="header-tag">
               <ShieldCheck size={16} /> مساحة الإدارة
@@ -116,7 +145,7 @@ function Shell({
           ) : (
             <span className="header-tag">دليلك للموجود بالمحل</span>
           )}
-          <Install admin={isAdmin} />
+          {data && <Install admin={isAdmin} />}
         </div>
       </header>
       {(!online || !connected) && (

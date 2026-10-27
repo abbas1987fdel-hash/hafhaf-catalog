@@ -1,0 +1,235 @@
+/* Compact two-column browsing, independent of the legacy category strip. */
+.store-refresh .compact-categories {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 900px;
+  margin-inline: auto;
+}
+.store-refresh .compact-categories .category-card {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  border-radius: 18px;
+  isolation: isolate;
+}
+.store-refresh .compact-categories .category-card > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  object-fit: cover;
+}
+.store-refresh .compact-categories .category-card > div {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 40px 18px 16px;
+  color: white;
+  background: linear-gradient(transparent, #061b17e6 45%);
+}
+.store-refresh .compact-categories .category-card h3 {
+  font-size: clamp(17px, 2.4vw, 27px);
+  color: white;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+.store-refresh .compact-categories .category-card small {
+  color: #f3f7ef;
+  font-size: 12px;
+}
+.store-refresh .compact-categories .category-card span {
+  border: 0;
+  margin-top: 5px;
+  padding-top: 0;
+  font-size: 12px;
+  color: #e2f3ae;
+}
+.store-banner {
+  margin-bottom: 28px;
+}
+.banner-frame {
+  aspect-ratio: 2.35 / 1;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  border-radius: 22px;
+  background: #e6ecd9;
+  isolation: isolate;
+}
+.banner-slide-pair {
+  position: absolute;
+  inset: 0;
+}
+.banner-slide-pair > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.banner-slide-pair .banner-outgoing {
+  animation: banner-out 0.7s ease-in-out both;
+}
+.banner-slide-pair .banner-incoming {
+  animation: banner-in 0.7s ease-in-out both;
+}
+@keyframes banner-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes banner-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.banner-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 20px;
+  color: var(--green);
+}
+.banner-placeholder h1 {
+  font-size: clamp(20px, 4vw, 42px);
+}
+.banner-caption {
+  text-align: center;
+  padding: 15px 12px 0;
+}
+.banner-caption h1 {
+  font-size: clamp(20px, 2.5vw, 30px);
+  margin-bottom: 5px;
+}
+.banner-caption p {
+  color: var(--muted);
+  font-size: 14px;
+}
+.banner-controls {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 30px;
+  padding: 5px 12px 5px 5px;
+  background: #081b18bf;
+  color: white;
+  direction: ltr;
+  font-size: 12px;
+}
+.banner-controls button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #ffffff25;
+  color: white;
+}
+.product-gallery > img {
+  height: calc(100% - 75px);
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+}
+.product-gallery .photo-caption {
+  text-align: center;
+  min-height: 55px;
+  max-width: 85vw;
+}
+.photo-caption h2 {
+  font-size: 19px;
+  color: white;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.photo-caption p {
+  font-size: 14px;
+  color: #e8f1e9;
+}
+.photo-caption span {
+  color: #c2d0c6;
+  margin-inline-start: 8px;
+}
+.photo-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #163d35d9;
+  color: white;
+  border: 1px solid #ffffff50;
+  width: 46px;
+  height: 54px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+}
+.photo-next {
+  left: 12px;
+}
+.photo-previous {
+  right: 12px;
+}
+.photo-nav:focus-visible {
+  outline: 3px solid white;
+}
+@media (max-width: 600px) {
+  .store-refresh .compact-categories {
+    gap: 12px;
+  }
+  .store-refresh .compact-categories .category-card {
+    border-radius: 14px;
+  }
+  .store-refresh .compact-categories .category-card > div {
+    padding: 25px 11px 10px;
+  }
+  .store-refresh .compact-categories .category-card h3 {
+    font-size: 17px;
+  }
+  .banner-frame {
+    border-radius: 16px;
+  }
+  .banner-placeholder {
+    gap: 12px;
+    padding: 15px;
+  }
+  .banner-placeholder svg {
+    width: 30px;
+  }
+  .banner-caption {
+    padding: 12px 4px 0;
+  }
+  .banner-caption p {
+    font-size: 12px;
+  }
+  .photo-nav {
+    width: 40px;
+    height: 48px;
+  }
+  .photo-next {
+    left: 6px;
+  }
+  .photo-previous {
+    right: 6px;
+  }
+  .photo-caption h2 {
+    font-size: 17px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .banner-slide-pair .banner-outgoing {
+    animation: none;
+    visibility: hidden;
+  }
+  .banner-slide-pair .banner-incoming {
+    animation: none;
+  }
+}

@@ -1,4 +1,5 @@
 export type Category = {
+  protected?: boolean;
   locked?: boolean;
   accessCode?: string;
   productCount?: number;
@@ -23,6 +24,8 @@ export type Settings = {
   headline: string;
   subtitle: string;
   banner?: string;
+  banners?: string[];
+  bannerUrls?: string[];
   bannerUrl?: string | null;
 };
 export type Catalog = {

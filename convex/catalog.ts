@@ -13,6 +13,33 @@ async function requireAdmin(ctx: any, token: string) {
     .unique();
   if (!s || s.expires < Date.now()) fail("انتهت الجلسة، سجّل الدخول مجددًا");
 }
+async function requireCategory(
+  ctx: any,
+  adminToken: string,
+  category: string,
+  categoryToken?: string,
+) {
+  await requireAdmin(ctx, adminToken);
+  const pin = await ctx.db
+    .query("categoryPins")
+    .withIndex("category", (q: any) => q.eq("category", category))
+    .unique();
+  if (!pin) return;
+  const grant = categoryToken
+    ? await ctx.db
+        .query("categoryAccess")
+        .withIndex("token", (q: any) => q.eq("token", categoryToken))
+        .unique()
+    : null;
+  if (
+    !grant ||
+    grant.category !== category ||
+    grant.adminSession !== adminToken ||
+    grant.version !== pin.version ||
+    grant.expires <= Date.now()
+  )
+    fail("أدخل رمز القسم أولًا أو أعد فتح القسم");
+}
 export const login = mutation({
   args: { pin: v.string() },
   handler: async (ctx, { pin }) => {
@@ -60,58 +87,38 @@ export const catalog = query({
     refresh: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const adminSession = args.adminToken
-      ? await ctx.db
-          .query("sessions")
-          .withIndex("token", (q) => q.eq("token", args.adminToken!))
-          .unique()
-      : null;
-    const admin = !!adminSession && adminSession.expires > Date.now();
     const cats = await ctx.db.query("categories").collect();
     const pins = await ctx.db.query("categoryPins").collect();
-    const allowed = new Set<string>();
-    for (const token of (args.accessTokens || []).slice(0, 100)) {
-      const grant = await ctx.db
-        .query("categoryAccess")
-        .withIndex("token", (q) => q.eq("token", token))
-        .unique();
-      if (
-        grant &&
-        grant.expires > Date.now() &&
-        pins.some(
-          (pin) =>
-            pin.category === grant.category && pin.version === grant.version,
-        )
-      )
-        allowed.add(grant.category);
-    }
-    const canSee = (id: string) =>
-      admin || !pins.some((pin) => pin.category === id) || allowed.has(id);
     const products = await ctx.db.query("products").collect();
     const settings = await ctx.db.query("settings").first();
     return {
       categories: await Promise.all(
         cats.map(async (c) => ({
           ...c,
-          locked: !canSee(c._id),
+          locked: false,
+          protected: pins.some((pin) => pin.category === c._id),
           productCount: products.filter((p) => p.category === c._id).length,
-          ...(admin
-            ? { accessCode: pins.find((pin) => pin.category === c._id)?.code }
-            : {}),
           imageUrl: await ctx.storage.getUrl(c.image),
         })),
       ),
       products: await Promise.all(
-        products
-          .filter((p) => canSee(p.category))
-          .map(async (p) => ({
-            ...p,
-            imageUrl: await ctx.storage.getUrl(p.image),
-          })),
+        products.map(async (p) => ({
+          ...p,
+          imageUrl: await ctx.storage.getUrl(p.image),
+        })),
       ),
       settings: settings
         ? {
             ...settings,
+            banners:
+              settings.banners ?? (settings.banner ? [settings.banner] : []),
+            bannerUrls: (
+              await Promise.all(
+                (
+                  settings.banners ?? (settings.banner ? [settings.banner] : [])
+                ).map((id: any) => ctx.storage.getUrl(id)),
+              )
+            ).filter((url): url is string => !!url),
             bannerUrl: settings.banner
               ? await ctx.storage.getUrl(settings.banner)
               : null,
@@ -121,8 +128,13 @@ export const catalog = query({
   },
 });
 export const unlockCategory = mutation({
-  args: { category: v.id("categories"), code: v.string() },
+  args: {
+    adminToken: v.string(),
+    category: v.id("categories"),
+    code: v.string(),
+  },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.adminToken);
     if (!(await ctx.db.get(args.category))) return { error: "القسم غير موجود" };
     const pin = await ctx.db
       .query("categoryPins")
@@ -130,7 +142,7 @@ export const unlockCategory = mutation({
       .unique();
     if (!pin) return { unlocked: true };
     const now = Date.now(),
-      key = "category:" + args.category;
+      key = "category:" + args.category + ":" + args.adminToken;
     const a = await ctx.db
       .query("attempts")
       .withIndex("key", (q) => q.eq("key", key))
@@ -151,11 +163,12 @@ export const unlockCategory = mutation({
     const token = crypto.randomUUID() + crypto.randomUUID();
     await ctx.db.insert("categoryAccess", {
       category: args.category,
+      adminSession: args.adminToken,
       version: pin.version,
       token,
       expires: now + 8 * 3600000,
     });
-    return { token };
+    return { token, accessCode: pin.code };
   },
 });
 export const uploadUrl = mutation({
@@ -178,6 +191,7 @@ function clean(s: string, max = 100) {
 export const saveCategory = mutation({
   args: {
     token: v.string(),
+    categoryToken: v.optional(v.string()),
     id: v.optional(v.id("categories")),
     name: v.string(),
     phone: v.string(),
@@ -186,6 +200,8 @@ export const saveCategory = mutation({
   },
   handler: async (ctx, a) => {
     await requireAdmin(ctx, a.token);
+    if (a.id) await requireCategory(ctx, a.token, a.id, a.categoryToken);
+    if (!a.id && !a.accessCode?.trim()) fail("أضف رمز دخول لإدارة القسم");
     await checkImage(ctx, a.image);
     const phone = a.phone.replace(/[^0-9]/g, "");
     if (!/^\d{10,15}$/.test(phone)) fail("أدخل رقم واتساب مع رمز الدولة");
@@ -222,6 +238,7 @@ export const saveCategory = mutation({
 export const saveProduct = mutation({
   args: {
     token: v.string(),
+    categoryToken: v.optional(v.string()),
     id: v.optional(v.id("products")),
     category: v.id("categories"),
     title: v.string(),
@@ -233,6 +250,13 @@ export const saveProduct = mutation({
   handler: async (ctx, a) => {
     await requireAdmin(ctx, a.token);
     if (!(await ctx.db.get(a.category))) fail("اختر قسمًا موجودًا");
+    await requireCategory(ctx, a.token, a.category, a.categoryToken);
+    if (a.id) {
+      const previous = await ctx.db.get(a.id);
+      if (!previous) fail("المنتج غير موجود");
+      if (previous.category !== a.category)
+        fail("لا يمكن نقل المنتج إلى قسم آخر من هذه الشاشة");
+    }
     await checkImage(ctx, a.image);
     if (!Number.isFinite(a.price) || a.price < 0 || a.price > 1e12)
       fail("السعر غير صحيح");
@@ -260,12 +284,14 @@ export const saveProduct = mutation({
 export const remove = mutation({
   args: {
     token: v.string(),
+    categoryToken: v.optional(v.string()),
     category: v.optional(v.id("categories")),
     product: v.optional(v.id("products")),
   },
   handler: async (ctx, a) => {
     await requireAdmin(ctx, a.token);
     if (a.category) {
+      await requireCategory(ctx, a.token, a.category, a.categoryToken);
       if (
         await ctx.db
           .query("products")
@@ -281,6 +307,7 @@ export const remove = mutation({
     } else if (a.product) {
       const p = await ctx.db.get(a.product);
       if (p) {
+        await requireCategory(ctx, a.token, p.category, a.categoryToken);
         await ctx.storage.delete(p.image);
         await ctx.db.delete(p._id);
       }
@@ -294,22 +321,27 @@ export const saveSettings = mutation({
     headline: v.string(),
     subtitle: v.string(),
     banner: v.optional(v.id("_storage")),
+    banners: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, a) => {
     await requireAdmin(ctx, a.token);
-    if (a.banner) await checkImage(ctx, a.banner);
     const old = await ctx.db.query("settings").first();
+    const previous = old?.banners ?? (old?.banner ? [old.banner] : []);
+    const banners = a.banners ?? (a.banner ? [a.banner] : previous);
+    if (banners.length > 8 || new Set(banners).size !== banners.length)
+      fail("أضف حتى 8 بنرات مختلفة");
+    for (const id of banners) await checkImage(ctx, id);
     const data = {
       name: clean(a.name),
       headline: clean(a.headline, 150),
       subtitle: clean(a.subtitle, 250),
-      banner: a.banner,
+      banner: banners[0],
+      banners,
     };
-    if (old) {
-      await ctx.db.patch(old._id, data);
-      if (old.banner && old.banner !== a.banner)
-        await ctx.storage.delete(old.banner);
-    } else await ctx.db.insert("settings", data);
+    if (old) await ctx.db.patch(old._id, data);
+    else await ctx.db.insert("settings", data);
+    for (const id of previous)
+      if (!banners.includes(id)) await ctx.storage.delete(id);
   },
 });
 export const discardUpload = mutation({
@@ -322,7 +354,8 @@ export const discardUpload = mutation({
     if (
       cats.some((c) => c.image === a.image) ||
       ps.some((p) => p.image === a.image) ||
-      s?.banner === a.image
+      s?.banner === a.image ||
+      s?.banners?.includes(a.image)
     )
       return;
     await ctx.storage.delete(a.image);

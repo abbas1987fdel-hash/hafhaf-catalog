@@ -62,12 +62,13 @@ describe("catalog workflows", () => {
   it("publishes category, optional quantity, price and availability to public catalog", async () => {
     const { t, token } = await authorized();
     const img = await image(t);
-    await t.mutation(api.saveCategory, {
-      token,
-      name: "الأجهزة",
-      phone: "9647700000000",
-      image: img,
-    });
+    await t.run((ctx) =>
+      ctx.db.insert("categories", {
+        name: "الأجهزة",
+        phone: "9647700000000",
+        image: img,
+      }),
+    );
     const c = (await t.query(api.catalog, {})).categories[0];
     await t.mutation(api.saveProduct, {
       token,
@@ -112,15 +113,17 @@ describe("catalog workflows", () => {
         name: "test",
         phone: "9647700000000",
         image: bad,
+        accessCode: "4321",
       }),
     ).rejects.toThrow("WebP");
     const img = await image(t);
-    await t.mutation(api.saveCategory, {
-      token,
-      name: "test",
-      phone: "9647700000000",
-      image: img,
-    });
+    await t.run((ctx) =>
+      ctx.db.insert("categories", {
+        name: "test",
+        phone: "9647700000000",
+        image: img,
+      }),
+    );
     const c = (await t.query(api.catalog, {})).categories[0];
     const args = {
       token,

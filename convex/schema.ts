@@ -7,6 +7,7 @@ export default defineSchema({
     version: v.string(),
   }).index("category", ["category"]),
   categoryAccess: defineTable({
+    adminSession: v.optional(v.string()),
     category: v.id("categories"),
     token: v.string(),
     version: v.string(),
@@ -28,6 +29,7 @@ export default defineSchema({
   settings: defineTable({
     name: v.string(),
     banner: v.optional(v.id("_storage")),
+    banners: v.optional(v.array(v.id("_storage"))),
     headline: v.string(),
     subtitle: v.string(),
   }),
