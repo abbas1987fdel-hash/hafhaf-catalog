@@ -523,12 +523,7 @@ export default function Store({ data }: { data: Catalog }) {
           )}
           <div className="photo-caption" aria-live="polite">
             <h2>{photo.title}</h2>
-            <p>
-              {photo.price !== undefined ? money(photo.price) + " د.ع" : ""}{" "}
-              <span>
-                • {photoIndex + 1} / {gallery.length}
-              </span>
-            </p>
+            {photo.price !== undefined && <p>{money(photo.price)} د.ع</p>}
           </div>
         </dialog>
       )}
