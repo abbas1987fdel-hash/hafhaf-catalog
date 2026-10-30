@@ -27,6 +27,7 @@ export type TextStyle = {
   decoration: "plain" | "bold" | "italic" | "underline" | "shadow";
 };
 export type Settings = {
+  bannerSeconds?: number;
   textStyles?: Record<"name" | "headline" | "subtitle", TextStyle>;
   name: string;
   headline: string;

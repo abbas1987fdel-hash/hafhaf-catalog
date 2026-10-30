@@ -322,6 +322,7 @@ export const saveSettings = mutation({
   args: {
     token: v.string(),
     name: v.string(),
+    bannerSeconds: v.optional(v.number()),
     textStyles: v.optional(textStyles),
     headline: v.string(),
     subtitle: v.string(),
@@ -331,6 +332,13 @@ export const saveSettings = mutation({
   handler: async (ctx, a) => {
     await requireAdmin(ctx, a.token);
     const old = await ctx.db.query("settings").first();
+    if (
+      a.bannerSeconds !== undefined &&
+      (!Number.isInteger(a.bannerSeconds) ||
+        a.bannerSeconds < 2 ||
+        a.bannerSeconds > 120)
+    )
+      fail("مدة التبديل يجب أن تكون من 2 إلى 120 ثانية");
     if (a.textStyles)
       for (const style of Object.values(a.textStyles)) {
         if (
@@ -348,6 +356,7 @@ export const saveSettings = mutation({
     for (const id of banners) await checkImage(ctx, id);
     const data = {
       name: clean(a.name),
+      bannerSeconds: a.bannerSeconds ?? old?.bannerSeconds ?? 5,
       textStyles: a.textStyles ?? old?.textStyles,
       headline: clean(a.headline, 150),
       subtitle: clean(a.subtitle, 250),

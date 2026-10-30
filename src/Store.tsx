@@ -98,8 +98,10 @@ function Banner({
   headline,
   subtitle,
   styles,
+  seconds = 5,
 }: {
   urls: string[];
+  seconds?: number;
   headline: string;
   subtitle: string;
   styles?: Settings["textStyles"];
@@ -110,9 +112,9 @@ function Banner({
     if (urls.length < 2 || paused) return;
     const timer = setInterval(() => {
       if (!document.hidden) setStep((v) => v + 1);
-    }, 5000);
+    }, seconds * 1000);
     return () => clearInterval(timer);
-  }, [urls.length, paused]);
+  }, [urls.length, paused, seconds]);
   const current = urls.length ? step % urls.length : 0;
   return (
     <section className="store-banner" aria-label="إعلانات المتجر">
@@ -233,6 +235,7 @@ export default function Store({ data }: { data: Catalog }) {
               headline={s.headline}
               subtitle={s.subtitle}
               styles={s.textStyles}
+              seconds={s.bannerSeconds ?? 5}
             />
             <section id="catalog">
               <div className="section-title">

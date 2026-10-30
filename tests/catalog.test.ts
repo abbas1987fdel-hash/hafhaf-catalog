@@ -210,3 +210,19 @@ it("stores text styling, preserves it for older clients, and rejects invalid sty
     }),
   ).rejects.toThrow();
 });
+
+it("saves banner timing, preserves it for older clients, and validates bounds", async () => {
+  const { t, token } = await authorized();
+  const args = { token, name: "Shop", headline: "Hello", subtitle: "Welcome" };
+  await t.mutation(api.saveSettings, {
+    ...args,
+    bannerSeconds: 12,
+    banners: [],
+  });
+  await t.mutation(api.saveSettings, args);
+  expect((await t.query(api.catalog, {})).settings.bannerSeconds).toBe(12);
+  for (const bannerSeconds of [0, 1, 121, 2.5])
+    await expect(
+      t.mutation(api.saveSettings, { ...args, bannerSeconds }),
+    ).rejects.toThrow();
+});

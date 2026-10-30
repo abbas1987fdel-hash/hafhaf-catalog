@@ -125,3 +125,26 @@
 .text-controls input[type="color"] {
   padding: 3px;
 }
+
+.admin-code-input,
+[data-theme="dark"] input.admin-code-input {
+  background: #f8faf9 !important;
+  color: #15251e !important;
+  -webkit-text-fill-color: #15251e !important;
+  font-weight: 700;
+  caret-color: #15251e;
+  border: 1px solid #64786c;
+}
+.banner-editor-item button {
+  color: #173c30;
+  background: #eef4ef;
+  border: 1px solid #718b7d;
+}
+.admin-product-search {
+  display: block;
+  margin: 16px 0;
+}
+.admin-product-search input {
+  width: 100%;
+  margin-top: 8px;
+}

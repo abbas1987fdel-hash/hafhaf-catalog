@@ -78,6 +78,8 @@ export default function Admin({ data }: { data: Catalog }) {
     token: string;
     code?: string;
   } | null>(null);
+  const [productSearch, setProductSearch] = useState("");
+  useEffect(() => setProductSearch(""), [route.category]);
   const [categoryPin, setCategoryPin] = useState("");
   const login = useMutation(api.login),
     logout = useMutation(api.logout),
@@ -267,6 +269,7 @@ export default function Admin({ data }: { data: Catalog }) {
           <label>
             رمز الدخول
             <input
+              className="admin-code-input"
               type="password"
               inputMode="numeric"
               value={pin}
@@ -416,6 +419,7 @@ export default function Admin({ data }: { data: Catalog }) {
               <label>
                 رمز دخول القسم
                 <input
+                  className="admin-code-input"
                   type="password"
                   autoComplete="off"
                   value={categoryPin}
@@ -446,7 +450,7 @@ export default function Admin({ data }: { data: Catalog }) {
                     {selected
                       ? "حدّث منتجات هذا القسم وأسعاره وتوفره."
                       : route.tab === "settings"
-                        ? "بنرات متحركة تظهر للزبائن كل خمس ثوانٍ."
+                        ? "بنرات متحركة بمدة تبديل تختارها من تعديل الواجهة."
                         : "لكل قسم رمز إدارة مستقل وصورة ورقم واتساب."}
                   </p>
                 </div>
@@ -552,13 +556,41 @@ export default function Admin({ data }: { data: Catalog }) {
                     sub="أضف صورة القسم واسمه ورمز إدارته ورقم واتساب للدعم."
                   />
                 ))}
+              {selected && entered && (
+                <label className="admin-product-search">
+                  بحث بالمنتجات
+                  <input
+                    type="search"
+                    placeholder="اكتب اسم المنتج…"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                  />
+                </label>
+              )}
               {selected &&
                 entered &&
                 (data.products.some((p) => p.category === selected._id) ? (
                   <div className="admin-products">
+                    {!data.products.some(
+                      (p) =>
+                        p.category === selected._id &&
+                        p.title
+                          .toLocaleLowerCase("ar")
+                          .includes(
+                            productSearch.trim().toLocaleLowerCase("ar"),
+                          ),
+                    ) && <p role="status">لا توجد منتجات مطابقة للبحث.</p>}
                     {[...data.products]
                       .sort(newestFirst)
-                      .filter((p) => p.category === selected._id)
+                      .filter(
+                        (p) =>
+                          p.category === selected._id &&
+                          p.title
+                            .toLocaleLowerCase("ar")
+                            .includes(
+                              productSearch.trim().toLocaleLowerCase("ar"),
+                            ),
+                      )
                       .map((p) => (
                         <article key={p._id}>
                           <img src={p.imageUrl || ""} alt={p.title} />
@@ -783,6 +815,7 @@ function EditorForm({
           headline: val("headline"),
           subtitle: val("subtitle"),
           banners: ids,
+          bannerSeconds: Number(val("bannerSeconds")),
           textStyles: Object.fromEntries(
             ["name", "headline", "subtitle"].map((key) => [
               key,
@@ -869,6 +902,22 @@ function EditorForm({
         <form onSubmit={submit}>
           {editor.kind === "settings" ? (
             <div className="banner-editor">
+              <label>
+                مدة تبديل صور البنر (بالثواني)
+                <input
+                  name="bannerSeconds"
+                  type="number"
+                  min="2"
+                  max="120"
+                  step="1"
+                  required
+                  defaultValue={s.bannerSeconds ?? 5}
+                />
+              </label>
+              <p>
+                لحذف صورة اضغط «حذف الصورة» أسفلها، ثم «حفظ ونشر» لتطبيق
+                التغيير.
+              </p>
               <label className="upload-field">
                 <ImagePlus size={30} />
                 <strong>إضافة صور البنرات</strong>
@@ -925,7 +974,7 @@ function EditorForm({
                           setBanners((list) => list.filter((_, j) => j !== i))
                         }
                       >
-                        <Trash2 size={17} />
+                        <Trash2 size={17} /> حذف الصورة
                       </button>
                     </div>
                   </div>
@@ -993,6 +1042,7 @@ function EditorForm({
               <label>
                 رمز دخول القسم للإدارة
                 <input
+                  className="admin-code-input"
                   name="accessCode"
                   required
                   minLength={4}

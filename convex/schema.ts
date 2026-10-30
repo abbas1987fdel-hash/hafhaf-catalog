@@ -31,6 +31,7 @@ export default defineSchema({
     name: v.string(),
     banner: v.optional(v.id("_storage")),
     banners: v.optional(v.array(v.id("_storage"))),
+    bannerSeconds: v.optional(v.number()),
     textStyles: v.optional(textStyles),
     headline: v.string(),
     subtitle: v.string(),
